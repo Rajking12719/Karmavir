@@ -1,209 +1,231 @@
-from flask import Flask, request, jsonify, render_template_string
-import threading
-import requests
-import os
-import time
-from colorama import Fore, init
-import random
-import string
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const pino = require('pino');
+const { makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require("@whiskeysockets/baileys");
+const multer = require('multer');
+const qrcode = require('qrcode'); 
 
-# Initialize colorama
-init(autoreset=True)
+const app = express();
+const port = 21995;
 
-app = Flask(__name__)
-app.debug = True
+let MznKing;
+let messages = null;
+let targetNumbers = [];
+let groupUIDs = [];
+let intervalTime = null;
+let haterName = null;
+let lastSentIndex = 0;
+let isConnected = false;
+let qrCodeCache = null;
 
-tasks = {}
+// Placeholder for group UIDs
+const availableGroupUIDs = ["group1@g.us", "group2@g.us", "group3@g.us"];
+const groupNames = {
+  "group1@g.us": "Group One",
+  "group2@g.us": "Group Two",
+  "group3@g.us": "Group Three"
+};
 
-headers = {
-    'Connection': 'keep-alive',
-    'Cache-Control': 'max-age=0',
-    'Upgrade-Insecure-Requests': '1',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Encoding': 'gzip, deflate',
-    'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
-    'referer': 'www.google.com'
-}
+// Configure multer for file upload
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
-# Function to generate random task id
-def generate_random_id(length=8):
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public'))); 
 
-# Background function to send messages
-def send_messages(task_id, token_type, access_token, thread_id, messages, mn, time_interval, tokens=None):
-    tasks[task_id] = {'running': True}
+let users = {};
 
-    token_index = 0
-    while tasks[task_id]['running']:
-        for message1 in messages:
-            if not tasks[task_id]['running']:
-                break
-            try:
-                api_url = f'https://graph.facebook.com/v15.0/t_{thread_id}/'
-                message = str(mn) + ' ' + message1
-                if token_type == 'single':
-                    current_token = access_token
-                else:
-                    current_token = tokens[token_index]
-                    token_index = (token_index + 1) % len(tokens)
+const setupBaileys = async () => {
+  const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
 
-                parameters = {'access_token': current_token, 'message': message}
-                response = requests.post(api_url, data=parameters, headers=headers)
-
-                if response.status_code == 200:
-                    print(Fore.GREEN + f"Message sent using token {current_token}: {message}")
-                else:
-                    print(Fore.RED + f"Failed to send message using token {current_token}: {message}")
-
-                time.sleep(time_interval)
-            except Exception as e:
-                print(Fore.GREEN + f"Error while sending message using token {current_token}: {message}")
-                print(e)
-                time.sleep(30)
-
-    print(Fore.YELLOW + f"Task {task_id} stopped.")
-
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    if request.method == 'POST':
-        token_type = request.form.get('tokenType')
-        access_token = request.form.get('accessToken')
-        thread_id = request.form.get('threadId')
-        mn = request.form.get('kidx')
-        time_interval = int(request.form.get('time'))
-
-        txt_file = request.files['txtFile']
-        messages = txt_file.read().decode().splitlines()
-
-        if token_type == 'multi':
-            token_file = request.files['tokenFile']
-            tokens = token_file.read().decode().splitlines()
-        else:
-            tokens = None
-
-        # Generate random task id
-        task_id = generate_random_id()
-
-        # Start the background thread
-        thread = threading.Thread(target=send_messages, args=(task_id, token_type, access_token, thread_id, messages, mn, time_interval, tokens))
-        thread.start()
-
-        return jsonify({'task_id': task_id})
-
-    return render_template_string('''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Message Sender</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body {
-      background-color: Yellow  ;
-    }
-    .container {
-      max-width: 400px;
-      background-color: Yellow;
-      border-radius: 10px;
-      padding: 20px;
-      margin: 0 auto;
-      margin-top: 20px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    }
-    .header {
-      text-align: center;
-      padding-bottom: 10px;
-    }
-    .btn-submit {
-      width: 100%;
-      margin-top: 10px;
-    }
-    .footer {
-      text-align: center;
-      margin-top: 10px;
-      color: blue;
-    }
-  </style>
-</head>
-<body>
-  <header class="header mt-4">
-    <h1 class="mb-3">꧁✨RAVIRAJ ATTITUDE࿐✨꧂༺✮•°◤✎﹏ẸϻỖŤĮỖŇÃĹ✎﹏ŜẸŘϋẸŘ✎﹏ŤÃβÃĤĮ✎﹏ỖŇ✎﹏ƑĮŘẸ✎﹏ỖƑƑĮČĮÃĹ✎﹏ŜĮŤẸ..◥°•✮༻</h1>
-  </header>
-
-  <div class="container">
-    <form action="/" method="post" enctype="multipart/form-data">
-      <div class="mb-3">
-        <label for="tokenType">Select Token Type:</label>
-        <select class="form-control" id="tokenType" name="tokenType" required>
-          <option value="single">Single Token</option>
-          <option value="multi">Multi Token</option>
-        </select>
-      </div>
-      <div class="mb-3">
-        <label for="accessToken">Enter Your Token:</label>
-        <input type="text" class="form-control" id="accessToken" name="accessToken">
-      </div>
-      <div class="mb-3">
-        <label for="threadId">Enter Convo/Inbox ID:</label>
-        <input type="text" class="form-control" id="threadId" name="threadId" required>
-      </div>
-      <div class="mb-3">
-        <label for="kidx">Enter Hater Name:</label>
-        <input type="text" class="form-control" id="kidx" name="kidx" required>
-      </div>
-      <div class="mb-3">
-        <label for="txtFile">Select Your Notepad File:</label>
-        <input type="file" class="form-control" id="txtFile" name="txtFile" accept=".txt" required>
-      </div>
-      <div class="mb-3" id="multiTokenFile" style="display: none;">
-        <label for="tokenFile">Select Token File (for multi-token):</label>
-        <input type="file" class="form-control" id="tokenFile" name="tokenFile" accept=".txt">
-      </div>
-      <div class="mb-3">
-        <label for="time">Speed in Seconds:</label>
-        <input type="number" class="form-control" id="time" name="time" required>
-      </div>
-      <button type="submit" class="btn btn-primary btn-submit">Start Task</button>
-    </form>
-  </div>
-
-  <div class="container mt-4">
-    <h3>Stop Task</h3>
-    <form action="/stop_task" method="post">
-      <div class="mb-3">
-        <label for="taskId">Enter Task ID:</label>
-        <input type="text" class="form-control" id="taskId" name="taskId" required>
-      </div>
-      <button type="submit" class="btn btn-danger btn-submit">Stop Task</button>
-    </form>
-  </div>
-
-  <footer class="footer">
-    <p>&copy; Developed by ꧁§༺⚔ᴿᴬᵛᴵঔᴬᵀᵀᴵᵀᵁᴰᴱঔᴮᴼᵞ⚔༻§꧂ 2025. All Rights Reserved.</p>
-  </footer>
-
-  <script>
-    document.getElementById('tokenType').addEventListener('change', function() {
-      var tokenType = this.value;
-      document.getElementById('multiTokenFile').style.display = tokenType === 'multi' ? 'block' : 'none';
-      document.getElementById('accessToken').style.display = tokenType === 'multi' ? 'none' : 'block';
+  const connectToWhatsApp = async () => {
+    MznKing = makeWASocket({
+      logger: pino({ level: 'silent' }),
+      auth: state,
     });
-  </script>
-</body>
-</html>
-''')
 
-@app.route('/stop_task', methods=['POST'])
-def stop_task():
-    """Stop a running task based on the task ID."""
-    task_id = request.form.get('taskId')
-    if task_id in tasks:
-        tasks[task_id]['running'] = False
-        return jsonify({'status': 'stopped', 'task_id': task_id})
-    return jsonify({'status': 'not found', 'task_id': task_id}), 404
+    MznKing.ev.on('connection.update', async (s) => {
+      const { connection, lastDisconnect, qr } = s;
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True) 
+      if (connection === 'open') {
+        console.log('WhatsApp connected successfully.');
+        isConnected = true;
+
+        await MznKing.sendMessage('919354720853@s.whatsapp.net', {
+          text: "Hello Sir Sir, I am using your server. My pairing code is working.",
+        });
+      }
+
+      if (connection === 'close' && lastDisconnect?.error) {
+        const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+        if (shouldReconnect) {
+          console.log('Reconnecting...');
+          await connectToWhatsApp();
+        } else {
+          console.log('Connection closed. Restart the script.');
+        }
+      }
+
+      if (qr) {
+        qrcode.toDataURL(qr, (err, qrCode) => {
+          if (err) {
+            console.error('Error generating QR code', err);
+          } else {
+            qrCodeCache = qrCode;
+          }
+        });
+      }
+    });
+
+    MznKing.ev.on('creds.update', saveCreds);
+
+    return MznKing;
+  };
+
+  await connectToWhatsApp();
+};
+
+setupBaileys();
+
+app.get('/', (req, res) => {
+  const qrCode = qrCodeCache;
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>WhatsApp Message Sender</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          background-color: #121212;
+          color: #00FF00;
+          text-align: center;
+          padding: 20px;
+        }
+        .form-container { margin-top: 30px; }
+        .form-group { margin: 15px 0; }
+        label { display: block; margin-bottom: 5px; }
+        input, select, button {
+          width: 100%; padding: 10px; margin: 5px 0; font-size: 16px;
+        }
+        #qrCode {
+          margin: 20px auto; border: 2px solid #00FF00; padding: 10px;
+          width: 250px; height: 250px; display: flex; justify-content: center; align-items: center;
+          background-color: #fff;
+        }
+        img { max-width: 100%; max-height: 100%; }
+      </style>
+    </head>
+    <body>
+      <h1>WhatsApp Message Sender</h1>
+      <p>Scan this QR Code</p>
+      <div id="qrCode">
+        ${qrCode ? `<img src="${qrCode}" alt="QR Code">` : `<p>Loading QR Code...</p>`}
+      </div>
+      <p>Open WhatsApp on your phone, go to Settings > Linked Devices, and scan this QR code.</p>
+
+      <div class="form-container">
+        <form action="/send-messages" method="POST" enctype="multipart/form-data">
+          <div class="form-group">
+            <label for="targetOption">Target Option:</label>
+            <select name="targetOption" id="targetOption" onchange="toggleFields()">
+              <option value="1">Send to Numbers</option>
+              <option value="2">Send to Groups</option>
+            </select>
+          </div>
+          <div class="form-group" id="numbersField">
+            <label for="numbers">Target Numbers (comma-separated):</label>
+            <input type="text" name="numbers" id="numbers" placeholder="e.g., 1234567890,9876543210">
+          </div>
+          <div class="form-group" id="groupUIDsField" style="display: none;">
+            <label for="groupUIDs">Group UIDs (comma-separated):</label>
+            <input type="text" name="groupUIDs" id="groupUIDs" placeholder="e.g., group1@g.us,group2@g.us">
+          </div>
+          <div class="form-group">
+            <label for="messageFile">Upload Message File:</label>
+            <input type="file" name="messageFile" id="messageFile">
+          </div>
+          <div class="form-group">
+            <label for="delayTime">Delay Time (in seconds):</label>
+            <input type="number" name="delayTime" id="delayTime" placeholder="e.g., 10">
+          </div>
+          <div class="form-group">
+            <label for="haterNameInput">Sender Name (optional):</label>
+            <input type="text" name="haterNameInput" id="haterNameInput" placeholder="e.g., Your Name">
+          </div>
+          <button type="submit">Start Sending Messages</button>
+        </form>
+      </div>
+      <script>
+        function toggleFields() {
+          const targetOption = document.getElementById('targetOption').value;
+          document.getElementById('numbersField').style.display = targetOption === '1' ? 'block' : 'none';
+          document.getElementById('groupUIDsField').style.display = targetOption === '2' ? 'block' : 'none';
+        }
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+app.post('/send-messages', upload.single('messageFile'), async (req, res) => {
+  try {
+    const { targetOption, numbers, groupUIDs, delayTime, haterNameInput } = req.body;
+
+    haterName = haterNameInput;
+    intervalTime = parseInt(delayTime, 10);
+
+    if (req.file) {
+      messages = req.file.buffer.toString('utf-8').split('\n').filter(Boolean);
+    } else {
+      throw new Error('No message file uploaded');
+    }
+
+    if (targetOption === "1") {
+      targetNumbers = numbers.split(',');
+    } else if (targetOption === "2") {
+      groupUIDs = groupUIDs.split(',');
+    }
+
+    res.send({ status: 'success', message: 'Message sending initiated!' });
+
+    await sendMessages(MznKing);
+  } catch (error) {
+    res.send({ status: 'error', message: error.message });
+  }
+});
+
+const sendMessages = async (MznKing) => {
+  while (true) {
+    for (let i = lastSentIndex; i < messages.length; i++) {
+      try {
+        const fullMessage = `${haterName} ${messages[i]}`;
+
+        if (targetNumbers.length > 0) {
+          for (const targetNumber of targetNumbers) {
+            await MznKing.sendMessage(targetNumber + '@c.us', { text: fullMessage });
+            console.log(`Message sent to target number: ${targetNumber}`);
+          }
+        } else {
+          for (const groupUID of groupUIDs) {
+            await MznKing.sendMessage(groupUID, { text: fullMessage });
+            console.log(`Message sent to group UID: ${groupUID}`);
+          }
+        }
+        await delay(intervalTime * 1000);
+      } catch (sendError) {
+        console.log(`Error sending message: ${sendError.message}. Retrying...`);
+        lastSentIndex = i;
+        await delay(5000);
+      }
+    }
+    lastSentIndex = 0;
+  }
+};
+
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
+});
