@@ -1,1 +1,1 @@
-np install
+colorama
